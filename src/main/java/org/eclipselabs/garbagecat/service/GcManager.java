@@ -139,6 +139,45 @@ public class GcManager {
         this.jvmStartDate = jvmStartDate;
     }
 
+    private BigDecimal getAllocationRateUnified() {
+        List<BlockingEvent> blockingEvents = jvmDao.getBlockingEvents(LogEventType.UNIFIED_G1_YOUNG_PAUSE);
+
+        if (blockingEvents.isEmpty())
+            return BigDecimal.ZERO;
+
+        long allocatedKb = 0;
+        UnifiedG1YoungPauseEvent prior = null;
+        long firstEventTs = 0;
+        for (BlockingEvent event : blockingEvents) {
+            UnifiedG1YoungPauseEvent young = (UnifiedG1YoungPauseEvent) event;
+            if (prior == null) {
+                // skip the first event since we don't know if this is a complete JVM run
+                // and therefore can't accurately calculate allocation rate prior to the first log
+                // youngGc pause event
+                prior = young;
+                firstEventTs = prior.getTimestamp();
+                continue;
+            }
+            // will not have eden information if gc details not being logged
+            final Memory end = young.getCombinedOccupancyInit();
+            final Memory priorMem = prior.getCombinedOccupancyEnd();
+            if (end != null && priorMem != null) {
+                allocatedKb += end.minus(priorMem).getValue(KILOBYTES);
+            }
+            prior = young;
+        }
+
+        BigDecimal durationMs = BigDecimal.valueOf(prior.getTimestamp() - firstEventTs);
+        if (durationMs.longValue() <= 0)
+            return BigDecimal.ZERO;
+
+        Memory allocated = Memory.kilobytes(allocatedKb);
+
+        BigDecimal kilobytesPerSec = BigDecimal.valueOf(allocated.getValue(KILOBYTES) / durationMs.longValue());
+
+        return kilobytesPerSec.multiply(BigDecimal.valueOf(1000));
+    }
+
     /**
      * Allocation rate in KB per second.
      */
@@ -257,7 +296,7 @@ public class GcManager {
         }
         jvmRun.setJvmOptions(new JvmOptions(jvmDao.getJvmContext()));
 
-        jvmRun.setAllocationRate(getAllocationRate());
+        jvmRun.setAllocationRate(getAllocationRateUnified());
         jvmRun.setAnalysis(jvmDao.getAnalysis());
         jvmRun.setBlockingEventCount(jvmDao.getBlockingEventCount());
         jvmRun.setEventTypes(jvmDao.getEventTypes());

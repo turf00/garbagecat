@@ -410,7 +410,7 @@ public class Main {
 
                 // As of now the allocation rate is only implemented for G1GC collector.
                 if (jvmRun.getJvmOptions().getUseG1Gc() != null
-                        || jvmRun.getEventTypes().contains(LogEventType.G1_YOUNG_PAUSE)) {
+                        || jvmRun.getEventTypes().contains(LogEventType.UNIFIED_G1_YOUNG_PAUSE)) {
                     BigDecimal allocationRate = jvmRun.getAllocationRate();
                     if (allocationRate.longValue() > 0) {
                         Memory gbPerSec = Memory.memory(allocationRate.longValue(), KILOBYTES);
